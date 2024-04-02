@@ -1,10 +1,14 @@
 import streamlit as st
 import pandas as pd
 import xlsxwriter
-import win32com.client as win32
 from datetime import datetime
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
-def send_email(email,anexo):
+def enviar_email(email, anexo):
 
     hora_atual = datetime.now().time()
     if hora_atual >= datetime.strptime('05:00:00', '%H:%M:%S').time() and hora_atual < datetime.strptime('12:00:00', '%H:%M:%S').time():
@@ -14,17 +18,37 @@ def send_email(email,anexo):
     else:
         msg_hr = 'Boa noite!'
 
-    outlook = win32.Dispatch('Outlook.Application')
-    mail = outlook.CreateItem(0)
-    mail.Subject = 'Tabela de Dados filtrada'
-    mail.Attachments.Add(anexo)
-    mail.Body = f"""
-                <p>{msg_hr}</p>
-                <p>Segue sua base filtrada via sistema de busca interno</p>
-                <p>Atenciosamente,<br>Equipe de Desenvolvimento</p>
+    # Configurações do servidor SMTP do Gmail
+    smtp_server = 'smtp.gmail.com'
+    smtp_port = 587
+
+    # Construindo o email
+    msg = MIMEMultipart()
+    msg['From'] = 'equipe.desenvolvimento.cip@gmail.com'
+    msg['To'] = email
+    msg['Subject'] = 'Base Dados Filtrada'
+
+    texto_corpo = f"""
+                {msg_hr}
+                Segue sua base filtrada via sistema de busca interno
+                Atenciosamente,<br>Equipe de Desenvolvimento
                 """
-    mail.To = email
-    mail.Send()
+    # Corpo do email
+    msg.attach(MIMEText(texto_corpo, 'plain'))
+
+    # Adicionando o anexo
+    with open(anexo, 'rb') as attachment:
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename= {anexo}')
+        msg.attach(part)
+
+    # Conectando-se ao servidor SMTP do Gmail e enviando o email
+    with smtplib.SMTP(smtp_server, smtp_port) as server:
+        server.starttls()
+        server.login('equipe.desenvolvimento.cip@gmail.com', 'Equipe_Desenvolvimento')
+        server.sendmail('equipe.desenvolvimento.cip@gmail.com', email, msg.as_string())
 
 def get_excel_bytes(df):
     with pd.ExcelWriter("tabela_filtrada.xlsx", engine="xlsxwriter") as writer:
@@ -53,10 +77,14 @@ if cpfcnpj != '':
     if not df.empty:
         file_bytes = get_excel_bytes(tabela_filtrada)
         st.download_button(label='Baixar tabela filtrada', data=file_bytes, file_name='tabela_filtrada.xlsx', mime='application/octet-stream')
-        enviar_email = st.button('Enviar por email')
-        if enviar_email:
+        enviar_email_1 = st.button('Enviar por email?')
+        if enviar_email_1:
             email = st.text_input('Digite seu email')
-            send_email(email,'tabela_filtrada.xlsx')
+            enviar_email_2 = st.button('Enviar')
+            if enviar_email_2 and email != '':
+                enviar_email(email,'tabela_filtrada.xlsx')
+            else:
+                st.info('Você deve inserir um endereço de email!')
     else:
         st.info('A busca não retornou resultados!')
 else:
